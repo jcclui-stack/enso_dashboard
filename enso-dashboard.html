@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ENSO Monitor — El Niño / Southern Oscillation Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&family=IBM+Plex+Mono:wght@400;500;600&family=Spectral:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0a1018;
+    --panel:#101a26;
+    --panel-2:#16242f;
+    --line:#22323f;
+    --ink:#e8eef2;
+    --muted:#7d93a3;
+    --faint:#506576;
+    --warm:#ff6a3d;       /* El Niño */
+    --warm-soft:#ffb38a;
+    --cool:#36c5e0;       /* La Niña */
+    --cool-soft:#9fe4f2;
+    --neutral:#8ea88f;    /* Neutral */
+    --gold:#e9c46a;
+    --grad-warm:linear-gradient(135deg,#ff6a3d,#ff9a3d);
+    --grad-cool:linear-gradient(135deg,#1f9bd1,#36c5e0);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    background:
+      radial-gradient(1200px 700px at 80% -10%, rgba(255,106,61,.10), transparent 60%),
+      radial-gradient(1100px 800px at -10% 30%, rgba(54,197,224,.10), transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:'Archivo',sans-serif;
+    line-height:1.5;
+    min-height:100vh;
+    -webkit-font-smoothing:antialiased;
+  }
+  .grain{position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.035;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 22px;position:relative;z-index:2}
+
+  /* ---------- HEADER ---------- */
+  header{padding:46px 0 26px;border-bottom:1px solid var(--line)}
+  .kicker{font-family:'IBM Plex Mono',monospace;font-size:.72rem;letter-spacing:.32em;
+    text-transform:uppercase;color:var(--warm-soft);margin-bottom:14px}
+  h1{font-size:clamp(2.3rem,5.6vw,4rem);font-weight:900;line-height:.98;letter-spacing:-.02em}
+  h1 .o{color:var(--warm)}
+  h1 .a{color:var(--cool)}
+  .sub{font-family:'Spectral',serif;font-style:italic;color:var(--muted);
+    font-size:1.05rem;margin-top:14px;max-width:60ch}
+
+  .meta-row{display:flex;flex-wrap:wrap;gap:10px;margin-top:26px}
+  .meta{font-family:'IBM Plex Mono',monospace;font-size:.74rem;border:1px solid var(--line);
+    background:var(--panel);padding:9px 14px;border-radius:999px;color:var(--muted);
+    display:flex;align-items:center;gap:8px}
+  .meta b{color:var(--ink);font-weight:600}
+  .dot{width:7px;height:7px;border-radius:50%;display:inline-block}
+  .dot.live{background:var(--warm);box-shadow:0 0 0 0 rgba(255,106,61,.6);animation:pulse 2.2s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(255,106,61,.55)}70%{box-shadow:0 0 0 9px rgba(255,106,61,0)}100%{box-shadow:0 0 0 0 rgba(255,106,61,0)}}
+
+  /* ---------- STATUS BANNER ---------- */
+  .status{margin:30px 0 38px;border:1px solid var(--line);border-radius:18px;overflow:hidden;
+    background:linear-gradient(180deg,var(--panel),var(--panel-2));position:relative}
+  .status::before{content:"";position:absolute;left:0;top:0;bottom:0;width:5px;background:var(--grad-warm)}
+  .status-inner{padding:26px 30px;display:flex;flex-wrap:wrap;align-items:center;gap:22px;justify-content:space-between}
+  .status-tag{font-family:'IBM Plex Mono',monospace;font-size:.72rem;letter-spacing:.2em;
+    text-transform:uppercase;color:var(--faint);margin-bottom:6px}
+  .status-head{font-size:1.7rem;font-weight:800;letter-spacing:-.01em}
+  .status-head .badge{font-size:.7rem;vertical-align:middle;font-family:'IBM Plex Mono',monospace;
+    background:rgba(255,106,61,.16);color:var(--warm-soft);border:1px solid rgba(255,106,61,.3);
+    padding:4px 9px;border-radius:6px;letter-spacing:.12em;margin-left:10px;font-weight:600}
+  .status-desc{color:var(--muted);font-family:'Spectral',serif;font-size:1rem;margin-top:8px;max-width:54ch}
+  .status-meter{min-width:240px;flex:1}
+
+  /* phase track */
+  .track{height:14px;border-radius:8px;background:
+    linear-gradient(90deg,var(--cool) 0%,var(--cool) 28%,var(--neutral) 40%,var(--neutral) 60%,var(--warm) 72%,var(--warm) 100%);
+    position:relative;margin:18px 0 8px;opacity:.85}
+  .track .needle{position:absolute;top:-7px;width:3px;height:28px;background:#fff;border-radius:2px;
+    box-shadow:0 0 12px rgba(255,255,255,.7);transform:translateX(-50%)}
+  .track .needle::after{content:"";position:absolute;top:-6px;left:50%;transform:translateX(-50%);
+    width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:7px solid #fff}
+  .track-labels{display:flex;justify-content:space-between;font-family:'IBM Plex Mono',monospace;
+    font-size:.66rem;color:var(--faint);letter-spacing:.08em;text-transform:uppercase}
+
+  /* ---------- INDEX CARDS ---------- */
+  .section-title{font-family:'IBM Plex Mono',monospace;font-size:.74rem;letter-spacing:.26em;
+    text-transform:uppercase;color:var(--faint);margin:8px 0 18px;display:flex;align-items:center;gap:14px}
+  .section-title::after{content:"";flex:1;height:1px;background:var(--line)}
+
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:18px}
+  .card{background:linear-gradient(180deg,var(--panel),var(--panel-2));border:1px solid var(--line);
+    border-radius:16px;padding:24px;position:relative;overflow:hidden;transition:transform .25s ease,border-color .25s ease}
+  .card:hover{transform:translateY(-4px);border-color:#33485a}
+  .card .glow{position:absolute;width:160px;height:160px;border-radius:50%;filter:blur(50px);
+    top:-60px;right:-50px;opacity:.5;pointer-events:none}
+  .card.warm .glow{background:var(--warm)}
+  .card.cool .glow{background:var(--cool)}
+  .card.neutral .glow{background:var(--neutral)}
+  .card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;position:relative;z-index:2}
+  .idx-name{font-weight:800;font-size:1.18rem;letter-spacing:-.01em}
+  .idx-full{font-family:'IBM Plex Mono',monospace;font-size:.66rem;color:var(--faint);
+    text-transform:uppercase;letter-spacing:.12em;margin-top:3px}
+  .phase-pill{font-family:'IBM Plex Mono',monospace;font-size:.64rem;font-weight:600;letter-spacing:.1em;
+    text-transform:uppercase;padding:5px 10px;border-radius:6px;white-space:nowrap}
+  .pill-warm{background:rgba(255,106,61,.15);color:var(--warm-soft);border:1px solid rgba(255,106,61,.32)}
+  .pill-cool{background:rgba(54,197,224,.13);color:var(--cool-soft);border:1px solid rgba(54,197,224,.3)}
+  .pill-neutral{background:rgba(142,168,143,.14);color:#bcd0bd;border:1px solid rgba(142,168,143,.3)}
+
+  .value{font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:3.1rem;line-height:1;
+    margin:22px 0 4px;position:relative;z-index:2;letter-spacing:-.02em}
+  .value .unit{font-size:1.05rem;color:var(--muted);margin-left:4px;font-weight:400}
+  .trend{font-family:'IBM Plex Mono',monospace;font-size:.78rem;color:var(--muted);
+    display:flex;align-items:center;gap:7px;position:relative;z-index:2}
+  .trend .arrow{font-weight:700}
+  .up{color:var(--warm)} .down{color:var(--cool)}
+
+  /* mini gauge */
+  .gauge{margin-top:20px;position:relative;z-index:2}
+  .gauge-bar{height:8px;border-radius:6px;background:var(--panel-2);border:1px solid var(--line);position:relative;overflow:visible}
+  .gauge-fill{position:absolute;top:0;bottom:0;border-radius:6px}
+  .gauge-zero{position:absolute;top:-4px;bottom:-4px;width:1px;background:var(--faint);left:50%}
+  .gauge-scale{display:flex;justify-content:space-between;font-family:'IBM Plex Mono',monospace;
+    font-size:.62rem;color:var(--faint);margin-top:7px}
+  .card-foot{margin-top:18px;padding-top:14px;border-top:1px solid var(--line);
+    font-family:'IBM Plex Mono',monospace;font-size:.66rem;color:var(--faint);
+    display:flex;justify-content:space-between;position:relative;z-index:2}
+  .dates{margin-top:14px;padding-top:14px;border-top:1px solid var(--line);
+    position:relative;z-index:2;display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .date-cell .lbl{font-family:'IBM Plex Mono',monospace;font-size:.6rem;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--faint);display:block;margin-bottom:3px}
+  .date-cell .val{font-family:'IBM Plex Mono',monospace;font-size:.78rem;color:var(--ink);font-weight:500}
+  .date-cell.next .val{color:var(--gold)}
+
+  /* ---------- THRESHOLD TABLE ---------- */
+  .thresh-wrap{background:linear-gradient(180deg,var(--panel),var(--panel-2));
+    border:1px solid var(--line);border-radius:16px;overflow:hidden}
+  table{width:100%;border-collapse:collapse;font-size:.9rem}
+  th,td{padding:15px 20px;text-align:left;border-bottom:1px solid var(--line)}
+  th{font-family:'IBM Plex Mono',monospace;font-size:.66rem;letter-spacing:.16em;
+    text-transform:uppercase;color:var(--faint);font-weight:600;background:rgba(0,0,0,.18)}
+  td{color:var(--ink)}
+  tr:last-child td{border-bottom:none}
+  td.idx{font-weight:700}
+  .chip{font-family:'IBM Plex Mono',monospace;font-size:.74rem;font-weight:600;padding:4px 9px;border-radius:6px;display:inline-block}
+  .chip.el{background:rgba(255,106,61,.14);color:var(--warm-soft)}
+  .chip.la{background:rgba(54,197,224,.12);color:var(--cool-soft)}
+  .chip.nu{background:rgba(142,168,143,.12);color:#bcd0bd}
+  td .note{display:block;font-size:.72rem;color:var(--faint);margin-top:3px;font-family:'Spectral',serif;font-style:italic}
+
+  /* ---------- FOOTER ---------- */
+  footer{margin:46px 0 40px;padding-top:24px;border-top:1px solid var(--line);
+    font-family:'IBM Plex Mono',monospace;font-size:.72rem;color:var(--faint);line-height:1.9}
+  footer a{color:var(--muted);text-decoration:none;border-bottom:1px dotted var(--faint)}
+  footer a:hover{color:var(--warm-soft)}
+  .src-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px 26px;margin-top:10px}
+  .disclaimer{margin-top:20px;font-family:'Spectral',serif;font-style:italic;font-size:.84rem;color:var(--faint);max-width:80ch}
+
+  /* ---------- CHARTS ---------- */
+  .chart-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(440px,1fr));gap:18px}
+  .chart-card{background:linear-gradient(180deg,var(--panel),var(--panel-2));border:1px solid var(--line);
+    border-radius:16px;padding:22px 22px 16px;position:relative;overflow:hidden}
+  .chart-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px}
+  .chart-title{font-weight:800;font-size:1.05rem;letter-spacing:-.01em}
+  .chart-meta{font-family:'IBM Plex Mono',monospace;font-size:.64rem;color:var(--faint);
+    text-transform:uppercase;letter-spacing:.1em}
+  .chart-sub{font-family:'Spectral',serif;font-style:italic;color:var(--muted);font-size:.84rem;margin-bottom:10px}
+  .chart-card svg{display:block;width:100%;height:auto}
+  .legend{display:flex;gap:16px;flex-wrap:wrap;margin-top:6px;font-family:'IBM Plex Mono',monospace;
+    font-size:.64rem;color:var(--muted)}
+  .legend span{display:flex;align-items:center;gap:6px}
+  .legend i{width:16px;height:2px;display:inline-block;border-radius:2px}
+  .legend i.dash{background:none;border-top:2px dashed var(--warm)}
+  .legend i.dashc{background:none;border-top:2px dashed var(--cool)}
+  .grid-line{stroke:var(--line);stroke-width:1}
+  .zero-line{stroke:var(--faint);stroke-width:1;stroke-dasharray:none}
+  .thr-warm{stroke:var(--warm);stroke-width:1;stroke-dasharray:4 4;opacity:.55}
+  .thr-cool{stroke:var(--cool);stroke-width:1;stroke-dasharray:4 4;opacity:.55}
+  .axis-lbl{fill:var(--faint);font-family:'IBM Plex Mono',monospace;font-size:9px}
+  .ax-title{fill:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.08em}
+
+  /* ---------- PROBABILITY ---------- */
+  .prob-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:18px;margin-bottom:18px}
+  .prob-card{background:linear-gradient(180deg,var(--panel),var(--panel-2));border:1px solid var(--line);
+    border-radius:16px;padding:26px 26px 24px;position:relative;overflow:hidden;text-align:center}
+  .prob-card .glow{position:absolute;width:200px;height:200px;border-radius:50%;filter:blur(60px);
+    top:-80px;left:50%;transform:translateX(-50%);opacity:.4;pointer-events:none;background:var(--warm)}
+  .prob-card.deep .glow{background:#d23b3b}
+  .prob-lbl{font-family:'IBM Plex Mono',monospace;font-size:.68rem;letter-spacing:.18em;
+    text-transform:uppercase;color:var(--muted);margin-bottom:4px;position:relative;z-index:2}
+  .prob-period{font-family:'IBM Plex Mono',monospace;font-size:.62rem;color:var(--faint);
+    margin-bottom:16px;position:relative;z-index:2}
+  .ring{position:relative;width:150px;height:150px;margin:0 auto 14px;z-index:2}
+  .ring svg{transform:rotate(-90deg)}
+  .ring .pct{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+  .ring .pct b{font-family:'IBM Plex Mono',monospace;font-size:2.4rem;font-weight:600;line-height:1;letter-spacing:-.02em}
+  .ring .pct s{font-family:'IBM Plex Mono',monospace;font-size:.6rem;text-decoration:none;color:var(--faint);
+    text-transform:uppercase;letter-spacing:.14em;margin-top:4px}
+  .prob-note{font-family:'Spectral',serif;font-style:italic;font-size:.86rem;color:var(--muted);
+    position:relative;z-index:2;max-width:34ch;margin:0 auto}
+  /* progression bars */
+  .prog-card{background:linear-gradient(180deg,var(--panel),var(--panel-2));border:1px solid var(--line);
+    border-radius:16px;padding:24px}
+  .prog-row{display:grid;grid-template-columns:130px 1fr 46px;align-items:center;gap:14px;margin:11px 0;
+    font-family:'IBM Plex Mono',monospace;font-size:.74rem}
+  .prog-row .seas{color:var(--muted);letter-spacing:.05em}
+  .prog-track{height:13px;border-radius:7px;background:var(--panel-2);border:1px solid var(--line);overflow:hidden}
+  .prog-fill{height:100%;border-radius:7px;background:var(--grad-warm);transition:width .8s ease}
+  .prog-val{color:var(--ink);font-weight:600;text-align:right}
+
+  @media (max-width:560px){
+    .status-inner{flex-direction:column;align-items:flex-start}
+    .value{font-size:2.6rem}
+    th,td{padding:12px 14px;font-size:.82rem}
+    .chart-grid{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body>
+<div class="grain"></div>
+<div class="wrap">
+  <header>
+    <div class="kicker">Climate Variability Monitor</div>
+    <h1>ENSO<span class="o"> Dashboard</span></h1>
+    <p class="sub">Real-time tracking of the El Niño–Southern <span style="font-style:normal">Oscillation</span> across the equatorial Pacific — oceanic and atmospheric indices, current phase, and the thresholds that define El Niño and La Niña.</p>
+    <div class="meta-row">
+      <span class="meta"><span class="dot live"></span> Status <b>El Niño Watch</b></span>
+      <span class="meta">Last updated <b>25 May 2026</b></span>
+      <span class="meta">Next update <b>01 Jun 2026</b></span>
+      <span class="meta">Region <b>Niño 3.4 · 5°N–5°S, 170°W–120°W</b></span>
+    </div>
+  </header>
+
+  <div class="status">
+    <div class="status-inner">
+      <div>
+        <div class="status-tag">Current ENSO Phase</div>
+        <div class="status-head">Neutral → Developing El Niño <span class="badge">98% MJJ 2026</span></div>
+        <div class="status-desc">Seasonal SST anomalies sit near the borderline threshold, but weekly values have surged and the atmosphere is beginning to couple. A rapid transition toward El Niño is underway.</div>
+      </div>
+      <div class="status-meter">
+        <div class="status-tag">La Niña ◄ ───── ► El Niño</div>
+        <div class="track"><span class="needle" style="left:63%"></span></div>
+        <div class="track-labels"><span>Strong La Niña</span><span>Neutral</span><span>Strong El Niño</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-title" style="margin-top:42px">Forecast Probability</div>
+  <div class="prob-grid">
+    <div class="prob-card">
+      <div class="glow"></div>
+      <div class="prob-lbl">El Niño Onset</div>
+      <div class="prob-period">May–Jul 2026</div>
+      <div class="ring">
+        <svg viewBox="0 0 150 150" width="150" height="150">
+          <circle cx="75" cy="75" r="66" fill="none" stroke="var(--line)" stroke-width="11"/>
+          <circle cx="75" cy="75" r="66" fill="none" stroke="var(--warm)" stroke-width="11"
+            stroke-linecap="round" stroke-dasharray="340.0 414.7"/>
+        </svg>
+        <div class="pct"><b style="color:var(--warm)">82%</b><s>probability</s></div>
+      </div>
+      <div class="prob-note">Chance El Niño conditions emerge this season — CPC El Niño Watch in effect.</div>
+    </div>
+    <div class="prob-card">
+      <div class="glow"></div>
+      <div class="prob-lbl">El Niño Persists</div>
+      <div class="prob-period">Dec 2026 – Feb 2027</div>
+      <div class="ring">
+        <svg viewBox="0 0 150 150" width="150" height="150">
+          <circle cx="75" cy="75" r="66" fill="none" stroke="var(--line)" stroke-width="11"/>
+          <circle cx="75" cy="75" r="66" fill="none" stroke="var(--warm)" stroke-width="11"
+            stroke-linecap="round" stroke-dasharray="398.1 414.7"/>
+        </svg>
+        <div class="pct"><b style="color:var(--warm)">96%</b><s>probability</s></div>
+      </div>
+      <div class="prob-note">Chance El Niño continues through the Northern Hemisphere winter peak.</div>
+    </div>
+    <div class="prob-card">
+      <div class="glow"></div>
+      <div class="prob-lbl">Strong El Niño</div>
+      <div class="prob-period">Peak · Nov 2026 – Jan 2027</div>
+      <div class="ring">
+        <svg viewBox="0 0 150 150" width="150" height="150">
+          <circle cx="75" cy="75" r="66" fill="none" stroke="var(--line)" stroke-width="11"/>
+          <circle cx="75" cy="75" r="66" fill="none" stroke="#ff7a3d" stroke-width="11"
+            stroke-linecap="round" stroke-dasharray="277.8 414.7"/>
+        </svg>
+        <div class="pct"><b style="color:#ff7a3d">67%</b><s>probability</s></div>
+      </div>
+      <div class="prob-note">Chance the peak is classified “strong or very strong” (≈2-in-3).</div>
+    </div>
+    <div class="prob-card deep">
+      <div class="glow"></div>
+      <div class="prob-lbl">Super El Niño</div>
+      <div class="prob-period">Peak · Nov 2026 – Jan 2027</div>
+      <div class="ring">
+        <svg viewBox="0 0 150 150" width="150" height="150">
+          <circle cx="75" cy="75" r="66" fill="none" stroke="var(--line)" stroke-width="11"/>
+          <circle cx="75" cy="75" r="66" fill="none" stroke="#d23b3b" stroke-width="11"
+            stroke-linecap="round" stroke-dasharray="136.8 414.7"/>
+        </svg>
+        <div class="pct"><b style="color:#d23b3b">33%</b><s>probability</s></div>
+      </div>
+      <div class="prob-note">Chance the peak exceeds +2.0 °C relative Niño 3.4 (≈1-in-3).</div>
+    </div>
+  </div>
+  <div class="prog-card">
+    <div class="chart-head" style="margin-bottom:10px"><span class="chart-title">El Niño Probability by Season</span><span class="chart-meta">NOAA CPC</span></div>
+    <div class="chart-sub" style="margin-bottom:16px">Official CPC probability that El Niño conditions are present each overlapping 3-month season</div>
+    <div class="prog-row"><span class="seas">MJJ 2026</span><div class="prog-track"><div class="prog-fill" style="width:82%"></div></div><span class="prog-val">82%</span></div><div class="prog-row"><span class="seas">JAS 2026</span><div class="prog-track"><div class="prog-fill" style="width:90%"></div></div><span class="prog-val">90%</span></div><div class="prog-row"><span class="seas">ASO 2026</span><div class="prog-track"><div class="prog-fill" style="width:94%"></div></div><span class="prog-val">94%</span></div><div class="prog-row"><span class="seas">SON 2026</span><div class="prog-track"><div class="prog-fill" style="width:95%"></div></div><span class="prog-val">95%</span></div><div class="prog-row"><span class="seas">OND 2026</span><div class="prog-track"><div class="prog-fill" style="width:96%"></div></div><span class="prog-val">96%</span></div><div class="prog-row"><span class="seas">NDJ 2026-27</span><div class="prog-track"><div class="prog-fill" style="width:96%"></div></div><span class="prog-val">96%</span></div><div class="prog-row"><span class="seas">DJF 2026-27</span><div class="prog-track"><div class="prog-fill" style="width:96%"></div></div><span class="prog-val">96%</span></div>
+  </div>
+
+  <div class="section-title" style="margin-top:42px">Primary Indices</div>
+  <div class="grid">
+    <div class="card warm">
+      <div class="glow"></div>
+      <div class="card-top">
+        <div><div class="idx-name">Niño 3.4 SST</div><div class="idx-full">Monthly SST anomaly</div></div>
+        <span class="phase-pill pill-neutral">Neutral</span>
+      </div>
+      <div class="value">+0.52<span class="unit">°C</span></div>
+      <div class="trend"><span class="arrow up">▲</span> +0.05 since previous reading</div>
+      <div class="gauge"><div class="gauge-bar"><div class="gauge-fill" style="left:50.0%;width:13.0%;background:var(--grad-warm)"></div><div class="gauge-zero"></div></div>
+        <div class="gauge-scale"><span>-2</span><span>0</span><span>+2</span></div></div>
+      <div class="card-foot"><span>Latest month</span><span>NOAA CPC</span></div>
+      <div class="dates"><div class="date-cell"><span class="lbl">Updated</span><span class="val">25 May 2026</span></div>
+        <div class="date-cell next"><span class="lbl">Next</span><span class="val">01 Jun 2026</span></div></div>
+    </div>
+    <div class="card warm">
+      <div class="glow"></div>
+      <div class="card-top">
+        <div><div class="idx-name">ONI → RONI</div><div class="idx-full">Oceanic Niño Index (3-mo)</div></div>
+        <span class="phase-pill pill-neutral">Neutral</span>
+      </div>
+      <div class="value">+0.10<span class="unit">°C</span></div>
+      <div class="trend"><span class="arrow up">▲</span> +0.00 since previous reading</div>
+      <div class="gauge"><div class="gauge-bar"><div class="gauge-fill" style="left:50.0%;width:2.5%;background:var(--grad-warm)"></div><div class="gauge-zero"></div></div>
+        <div class="gauge-scale"><span>-2</span><span>0</span><span>+2</span></div></div>
+      <div class="card-foot"><span>RONI replaced ONI · Feb 2026</span><span>NOAA CPC</span></div>
+      <div class="dates"><div class="date-cell"><span class="lbl">Updated</span><span class="val">25 May 2026</span></div>
+        <div class="date-cell next"><span class="lbl">Next</span><span class="val">22 Jun 2026</span></div></div>
+    </div>
+    <div class="card warm">
+      <div class="glow"></div>
+      <div class="card-top">
+        <div><div class="idx-name">SOI</div><div class="idx-full">Southern Oscillation Index</div></div>
+        <span class="phase-pill pill-warm">El Niño-leaning</span>
+      </div>
+      <div class="value">-11.1<span class="unit"></span></div>
+      <div class="trend"><span class="arrow up">▲</span> +0.10 since previous reading</div>
+      <div class="gauge"><div class="gauge-bar"><div class="gauge-fill" style="left:31.5%;width:18.5%;background:var(--grad-warm)"></div><div class="gauge-zero"></div></div>
+        <div class="gauge-scale"><span>-30</span><span>0</span><span>+30</span></div></div>
+      <div class="card-foot"><span>Latest month</span><span>BoM</span></div>
+      <div class="dates"><div class="date-cell"><span class="lbl">Updated</span><span class="val">25 May 2026</span></div>
+        <div class="date-cell next"><span class="lbl">Next</span><span class="val">01 Jun 2026</span></div></div>
+    </div>
+    <div class="card neutral">
+      <div class="glow"></div>
+      <div class="card-top">
+        <div><div class="idx-name">MEI.v2</div><div class="idx-full">Multivariate ENSO Index</div></div>
+        <span class="phase-pill pill-neutral">Neutral</span>
+      </div>
+      <div class="value">+0.30<span class="unit">σ</span></div>
+      <div class="trend"><span class="arrow up">▲</span> +0.10 since previous reading</div>
+      <div class="gauge"><div class="gauge-bar"><div class="gauge-fill" style="left:50.0%;width:7.5%;background:linear-gradient(135deg,#8ea88f,#ff9a3d)"></div><div class="gauge-zero"></div></div>
+        <div class="gauge-scale"><span>-2</span><span>0</span><span>+2</span></div></div>
+      <div class="card-foot"><span>Bimonthly · NOAA PSL</span><span>NOAA PSL</span></div>
+      <div class="dates"><div class="date-cell"><span class="lbl">Updated</span><span class="val">25 May 2026</span></div>
+        <div class="date-cell next"><span class="lbl">Next</span><span class="val">22 Jun 2026</span></div></div>
+    </div>
+  </div>
+
+  <div class="section-title" style="margin-top:42px">36-Month History</div>
+  <div class="chart-grid">
+    <div class="chart-card">
+      <div class="chart-head"><span class="chart-title">Niño 3.4 SST</span><span class="chart-meta">NOAA CPC</span></div>
+      <div class="chart-sub">Monthly SST anomaly · °C</div>
+      <svg viewBox="0 0 440 220" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Niño 3.4 SST 36-month time series">
+  <defs><linearGradient id="g_nio34sst" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="var(--warm)" stop-opacity="0.28"/>
+    <stop offset="100%" stop-color="var(--warm)" stop-opacity="0"/>
+  </linearGradient></defs>
+  <line class="grid-line" x1="40" y1="14.0" x2="426" y2="14.0"/><line class="grid-line" x1="40" y1="59.0" x2="426" y2="59.0"/><line class="grid-line" x1="40" y1="104.0" x2="426" y2="104.0"/><line class="grid-line" x1="40" y1="149.0" x2="426" y2="149.0"/><line class="grid-line" x1="40" y1="194.0" x2="426" y2="194.0"/><line class="thr-warm" x1="40" y1="68.0" x2="426" y2="68.0"/><line class="thr-cool" x1="40" y1="140.0" x2="426" y2="140.0"/><line class="zero-line" x1="40" y1="104.0" x2="426" y2="104.0"/>
+  <path d="M 40.0 104.0 L 40.0 77.0 L 51.0 59.0 L 62.1 36.5 L 73.1 23.0 L 84.1 14.0 L 95.1 14.0 L 106.2 18.5 L 117.2 32.0 L 128.2 50.0 L 139.3 68.0 L 150.3 86.0 L 161.3 99.5 L 172.3 104.0 L 183.4 113.0 L 194.4 122.0 L 205.4 126.5 L 216.5 135.5 L 227.5 135.5 L 238.5 131.0 L 249.5 126.5 L 260.6 117.5 L 271.6 113.0 L 282.6 104.0 L 293.7 99.5 L 304.7 104.0 L 315.7 113.0 L 326.7 117.5 L 337.8 126.5 L 348.8 131.0 L 359.8 126.5 L 370.9 122.0 L 381.9 113.0 L 392.9 104.0 L 403.9 90.5 L 415.0 82.8 L 426.0 80.6 L 426.0 104.0 Z" fill="url(#g_nio34sst)"/>
+  <path d="M 40.0 77.0 L 51.0 59.0 L 62.1 36.5 L 73.1 23.0 L 84.1 14.0 L 95.1 14.0 L 106.2 18.5 L 117.2 32.0 L 128.2 50.0 L 139.3 68.0 L 150.3 86.0 L 161.3 99.5 L 172.3 104.0 L 183.4 113.0 L 194.4 122.0 L 205.4 126.5 L 216.5 135.5 L 227.5 135.5 L 238.5 131.0 L 249.5 126.5 L 260.6 117.5 L 271.6 113.0 L 282.6 104.0 L 293.7 99.5 L 304.7 104.0 L 315.7 113.0 L 326.7 117.5 L 337.8 126.5 L 348.8 131.0 L 359.8 126.5 L 370.9 122.0 L 381.9 113.0 L 392.9 104.0 L 403.9 90.5 L 415.0 82.8 L 426.0 80.6" fill="none" stroke="var(--warm)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+  <circle cx="426.0" cy="80.6" r="3.5" fill="var(--warm)" stroke="var(--panel)" stroke-width="1.5"/><text class="axis-lbl" x="34" y="17.0" text-anchor="end">+2.0</text><text class="axis-lbl" x="34" y="62.0" text-anchor="end">+1.0</text><text class="axis-lbl" x="34" y="107.0" text-anchor="end">+0.0</text><text class="axis-lbl" x="34" y="152.0" text-anchor="end">-1.0</text><text class="axis-lbl" x="34" y="197.0" text-anchor="end">-2.0</text><text class="axis-lbl" x="40.0" y="212" text-anchor="middle">J23</text><text class="axis-lbl" x="73.1" y="212" text-anchor="middle">S23</text><text class="axis-lbl" x="106.2" y="212" text-anchor="middle">D23</text><text class="axis-lbl" x="139.3" y="212" text-anchor="middle">M24</text><text class="axis-lbl" x="172.3" y="212" text-anchor="middle">J24</text><text class="axis-lbl" x="205.4" y="212" text-anchor="middle">S24</text><text class="axis-lbl" x="238.5" y="212" text-anchor="middle">D24</text><text class="axis-lbl" x="271.6" y="212" text-anchor="middle">M25</text><text class="axis-lbl" x="304.7" y="212" text-anchor="middle">J25</text><text class="axis-lbl" x="337.8" y="212" text-anchor="middle">S25</text><text class="axis-lbl" x="370.9" y="212" text-anchor="middle">D25</text><text class="axis-lbl" x="403.9" y="212" text-anchor="middle">M26</text><text class="axis-lbl" x="426.0" y="212" text-anchor="middle">M26</text>
+</svg>
+      <div class="legend"><span><i class="dash"></i> El Niño ≥+0.8°C</span><span><i class="dashc"></i> La Niña ≤-0.8°C</span></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-head"><span class="chart-title">ONI → RONI</span><span class="chart-meta">NOAA CPC</span></div>
+      <div class="chart-sub">3-month running mean · °C</div>
+      <svg viewBox="0 0 440 220" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="ONI → RONI 36-month time series">
+  <defs><linearGradient id="g_onironi" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="var(--warm)" stop-opacity="0.28"/>
+    <stop offset="100%" stop-color="var(--warm)" stop-opacity="0"/>
+  </linearGradient></defs>
+  <line class="grid-line" x1="40" y1="14.0" x2="426" y2="14.0"/><line class="grid-line" x1="40" y1="59.0" x2="426" y2="59.0"/><line class="grid-line" x1="40" y1="104.0" x2="426" y2="104.0"/><line class="grid-line" x1="40" y1="149.0" x2="426" y2="149.0"/><line class="grid-line" x1="40" y1="194.0" x2="426" y2="194.0"/><line class="thr-warm" x1="40" y1="81.5" x2="426" y2="81.5"/><line class="thr-cool" x1="40" y1="126.5" x2="426" y2="126.5"/><line class="zero-line" x1="40" y1="104.0" x2="426" y2="104.0"/>
+  <path d="M 40.0 104.0 L 40.0 81.5 L 51.0 63.5 L 62.1 45.5 L 73.1 32.0 L 84.1 23.0 L 95.1 18.5 L 106.2 14.0 L 117.2 23.0 L 128.2 36.5 L 139.3 54.5 L 150.3 72.5 L 161.3 86.0 L 172.3 95.0 L 183.4 108.5 L 194.4 117.5 L 205.4 122.0 L 216.5 131.0 L 227.5 131.0 L 238.5 131.0 L 249.5 126.5 L 260.6 122.0 L 271.6 117.5 L 282.6 113.0 L 293.7 108.5 L 304.7 104.0 L 315.7 108.5 L 326.7 113.0 L 337.8 122.0 L 348.8 126.5 L 359.8 131.0 L 370.9 126.5 L 381.9 122.0 L 392.9 113.0 L 403.9 104.0 L 415.0 99.5 L 426.0 99.5 L 426.0 104.0 Z" fill="url(#g_onironi)"/>
+  <path d="M 40.0 81.5 L 51.0 63.5 L 62.1 45.5 L 73.1 32.0 L 84.1 23.0 L 95.1 18.5 L 106.2 14.0 L 117.2 23.0 L 128.2 36.5 L 139.3 54.5 L 150.3 72.5 L 161.3 86.0 L 172.3 95.0 L 183.4 108.5 L 194.4 117.5 L 205.4 122.0 L 216.5 131.0 L 227.5 131.0 L 238.5 131.0 L 249.5 126.5 L 260.6 122.0 L 271.6 117.5 L 282.6 113.0 L 293.7 108.5 L 304.7 104.0 L 315.7 108.5 L 326.7 113.0 L 337.8 122.0 L 348.8 126.5 L 359.8 131.0 L 370.9 126.5 L 381.9 122.0 L 392.9 113.0 L 403.9 104.0 L 415.0 99.5 L 426.0 99.5" fill="none" stroke="var(--warm)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+  <circle cx="426.0" cy="99.5" r="3.5" fill="var(--warm)" stroke="var(--panel)" stroke-width="1.5"/><text class="axis-lbl" x="34" y="17.0" text-anchor="end">+2.0</text><text class="axis-lbl" x="34" y="62.0" text-anchor="end">+1.0</text><text class="axis-lbl" x="34" y="107.0" text-anchor="end">+0.0</text><text class="axis-lbl" x="34" y="152.0" text-anchor="end">-1.0</text><text class="axis-lbl" x="34" y="197.0" text-anchor="end">-2.0</text><text class="axis-lbl" x="40.0" y="212" text-anchor="middle">J23</text><text class="axis-lbl" x="73.1" y="212" text-anchor="middle">S23</text><text class="axis-lbl" x="106.2" y="212" text-anchor="middle">D23</text><text class="axis-lbl" x="139.3" y="212" text-anchor="middle">M24</text><text class="axis-lbl" x="172.3" y="212" text-anchor="middle">J24</text><text class="axis-lbl" x="205.4" y="212" text-anchor="middle">S24</text><text class="axis-lbl" x="238.5" y="212" text-anchor="middle">D24</text><text class="axis-lbl" x="271.6" y="212" text-anchor="middle">M25</text><text class="axis-lbl" x="304.7" y="212" text-anchor="middle">J25</text><text class="axis-lbl" x="337.8" y="212" text-anchor="middle">S25</text><text class="axis-lbl" x="370.9" y="212" text-anchor="middle">D25</text><text class="axis-lbl" x="403.9" y="212" text-anchor="middle">M26</text><text class="axis-lbl" x="426.0" y="212" text-anchor="middle">M26</text>
+</svg>
+      <div class="legend"><span><i class="dash"></i> El Niño ≥+0.5°C</span><span><i class="dashc"></i> La Niña ≤-0.5°C</span></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-head"><span class="chart-title">SOI</span><span class="chart-meta">BoM</span></div>
+      <div class="chart-sub">Troup Southern Oscillation Index</div>
+      <svg viewBox="0 0 440 220" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="SOI 36-month time series">
+  <defs><linearGradient id="g_soi" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="var(--cool)" stop-opacity="0.28"/>
+    <stop offset="100%" stop-color="var(--cool)" stop-opacity="0"/>
+  </linearGradient></defs>
+  <line class="grid-line" x1="40" y1="14.0" x2="426" y2="14.0"/><line class="grid-line" x1="40" y1="59.0" x2="426" y2="59.0"/><line class="grid-line" x1="40" y1="104.0" x2="426" y2="104.0"/><line class="grid-line" x1="40" y1="149.0" x2="426" y2="149.0"/><line class="grid-line" x1="40" y1="194.0" x2="426" y2="194.0"/><line class="thr-warm" x1="40" y1="125.0" x2="426" y2="125.0"/><line class="thr-cool" x1="40" y1="83.0" x2="426" y2="83.0"/><line class="zero-line" x1="40" y1="104.0" x2="426" y2="104.0"/>
+  <path d="M 40.0 104.0 L 40.0 116.0 L 51.0 128.0 L 62.1 140.0 L 73.1 149.0 L 84.1 146.0 L 95.1 152.0 L 106.2 143.0 L 117.2 134.0 L 128.2 125.0 L 139.3 113.0 L 150.3 98.0 L 161.3 89.0 L 172.3 86.0 L 183.4 80.0 L 194.4 83.0 L 205.4 77.0 L 216.5 71.0 L 227.5 74.0 L 238.5 80.0 L 249.5 86.0 L 260.6 89.0 L 271.6 92.0 L 282.6 95.0 L 293.7 98.0 L 304.7 95.0 L 315.7 89.0 L 326.7 83.0 L 337.8 80.0 L 348.8 77.0 L 359.8 83.0 L 370.9 89.0 L 381.9 92.0 L 392.9 98.0 L 403.9 113.0 L 415.0 137.6 L 426.0 137.3 L 426.0 104.0 Z" fill="url(#g_soi)"/>
+  <path d="M 40.0 116.0 L 51.0 128.0 L 62.1 140.0 L 73.1 149.0 L 84.1 146.0 L 95.1 152.0 L 106.2 143.0 L 117.2 134.0 L 128.2 125.0 L 139.3 113.0 L 150.3 98.0 L 161.3 89.0 L 172.3 86.0 L 183.4 80.0 L 194.4 83.0 L 205.4 77.0 L 216.5 71.0 L 227.5 74.0 L 238.5 80.0 L 249.5 86.0 L 260.6 89.0 L 271.6 92.0 L 282.6 95.0 L 293.7 98.0 L 304.7 95.0 L 315.7 89.0 L 326.7 83.0 L 337.8 80.0 L 348.8 77.0 L 359.8 83.0 L 370.9 89.0 L 381.9 92.0 L 392.9 98.0 L 403.9 113.0 L 415.0 137.6 L 426.0 137.3" fill="none" stroke="var(--cool)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+  <circle cx="426.0" cy="137.3" r="3.5" fill="var(--cool)" stroke="var(--panel)" stroke-width="1.5"/><text class="axis-lbl" x="34" y="17.0" text-anchor="end">+30</text><text class="axis-lbl" x="34" y="62.0" text-anchor="end">+15</text><text class="axis-lbl" x="34" y="107.0" text-anchor="end">+0</text><text class="axis-lbl" x="34" y="152.0" text-anchor="end">-15</text><text class="axis-lbl" x="34" y="197.0" text-anchor="end">-30</text><text class="axis-lbl" x="40.0" y="212" text-anchor="middle">J23</text><text class="axis-lbl" x="73.1" y="212" text-anchor="middle">S23</text><text class="axis-lbl" x="106.2" y="212" text-anchor="middle">D23</text><text class="axis-lbl" x="139.3" y="212" text-anchor="middle">M24</text><text class="axis-lbl" x="172.3" y="212" text-anchor="middle">J24</text><text class="axis-lbl" x="205.4" y="212" text-anchor="middle">S24</text><text class="axis-lbl" x="238.5" y="212" text-anchor="middle">D24</text><text class="axis-lbl" x="271.6" y="212" text-anchor="middle">M25</text><text class="axis-lbl" x="304.7" y="212" text-anchor="middle">J25</text><text class="axis-lbl" x="337.8" y="212" text-anchor="middle">S25</text><text class="axis-lbl" x="370.9" y="212" text-anchor="middle">D25</text><text class="axis-lbl" x="403.9" y="212" text-anchor="middle">M26</text><text class="axis-lbl" x="426.0" y="212" text-anchor="middle">M26</text>
+</svg>
+      <div class="legend"><span><i class="dash"></i> El Niño ≤-7</span><span><i class="dashc"></i> La Niña ≥+7</span></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-head"><span class="chart-title">MEI.v2</span><span class="chart-meta">NOAA PSL</span></div>
+      <div class="chart-sub">Bimonthly standardised index · σ</div>
+      <svg viewBox="0 0 440 220" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="MEI.v2 36-month time series">
+  <defs><linearGradient id="g_meiv2" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="var(--gold)" stop-opacity="0.28"/>
+    <stop offset="100%" stop-color="var(--gold)" stop-opacity="0"/>
+  </linearGradient></defs>
+  <line class="grid-line" x1="40" y1="14.0" x2="426" y2="14.0"/><line class="grid-line" x1="40" y1="59.0" x2="426" y2="59.0"/><line class="grid-line" x1="40" y1="104.0" x2="426" y2="104.0"/><line class="grid-line" x1="40" y1="149.0" x2="426" y2="149.0"/><line class="grid-line" x1="40" y1="194.0" x2="426" y2="194.0"/><line class="thr-warm" x1="40" y1="81.5" x2="426" y2="81.5"/><line class="thr-cool" x1="40" y1="126.5" x2="426" y2="126.5"/><line class="zero-line" x1="40" y1="104.0" x2="426" y2="104.0"/>
+  <path d="M 40.0 104.0 L 40.0 77.0 L 51.0 63.5 L 62.1 50.0 L 73.1 36.5 L 84.1 27.5 L 95.1 23.0 L 106.2 18.5 L 117.2 32.0 L 128.2 45.5 L 139.3 63.5 L 150.3 81.5 L 161.3 95.0 L 172.3 104.0 L 183.4 113.0 L 194.4 122.0 L 205.4 126.5 L 216.5 131.0 L 227.5 131.0 L 238.5 126.5 L 249.5 122.0 L 260.6 117.5 L 271.6 113.0 L 282.6 108.5 L 293.7 104.0 L 304.7 104.0 L 315.7 108.5 L 326.7 113.0 L 337.8 117.5 L 348.8 122.0 L 359.8 122.0 L 370.9 117.5 L 381.9 113.0 L 392.9 104.0 L 403.9 99.5 L 415.0 95.0 L 426.0 90.5 L 426.0 104.0 Z" fill="url(#g_meiv2)"/>
+  <path d="M 40.0 77.0 L 51.0 63.5 L 62.1 50.0 L 73.1 36.5 L 84.1 27.5 L 95.1 23.0 L 106.2 18.5 L 117.2 32.0 L 128.2 45.5 L 139.3 63.5 L 150.3 81.5 L 161.3 95.0 L 172.3 104.0 L 183.4 113.0 L 194.4 122.0 L 205.4 126.5 L 216.5 131.0 L 227.5 131.0 L 238.5 126.5 L 249.5 122.0 L 260.6 117.5 L 271.6 113.0 L 282.6 108.5 L 293.7 104.0 L 304.7 104.0 L 315.7 108.5 L 326.7 113.0 L 337.8 117.5 L 348.8 122.0 L 359.8 122.0 L 370.9 117.5 L 381.9 113.0 L 392.9 104.0 L 403.9 99.5 L 415.0 95.0 L 426.0 90.5" fill="none" stroke="var(--gold)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+  <circle cx="426.0" cy="90.5" r="3.5" fill="var(--gold)" stroke="var(--panel)" stroke-width="1.5"/><text class="axis-lbl" x="34" y="17.0" text-anchor="end">+2.0</text><text class="axis-lbl" x="34" y="62.0" text-anchor="end">+1.0</text><text class="axis-lbl" x="34" y="107.0" text-anchor="end">+0.0</text><text class="axis-lbl" x="34" y="152.0" text-anchor="end">-1.0</text><text class="axis-lbl" x="34" y="197.0" text-anchor="end">-2.0</text><text class="axis-lbl" x="40.0" y="212" text-anchor="middle">J23</text><text class="axis-lbl" x="73.1" y="212" text-anchor="middle">S23</text><text class="axis-lbl" x="106.2" y="212" text-anchor="middle">D23</text><text class="axis-lbl" x="139.3" y="212" text-anchor="middle">M24</text><text class="axis-lbl" x="172.3" y="212" text-anchor="middle">J24</text><text class="axis-lbl" x="205.4" y="212" text-anchor="middle">S24</text><text class="axis-lbl" x="238.5" y="212" text-anchor="middle">D24</text><text class="axis-lbl" x="271.6" y="212" text-anchor="middle">M25</text><text class="axis-lbl" x="304.7" y="212" text-anchor="middle">J25</text><text class="axis-lbl" x="337.8" y="212" text-anchor="middle">S25</text><text class="axis-lbl" x="370.9" y="212" text-anchor="middle">D25</text><text class="axis-lbl" x="403.9" y="212" text-anchor="middle">M26</text><text class="axis-lbl" x="426.0" y="212" text-anchor="middle">M26</text>
+</svg>
+      <div class="legend"><span><i class="dash"></i> El Niño ≥+0.5σ</span><span><i class="dashc"></i> La Niña ≤-0.5σ</span></div>
+    </div>
+  </div>
+
+  <div class="section-title" style="margin-top:42px">Phase Thresholds</div>
+  <div class="thresh-wrap">
+    <table>
+      <thead><tr><th>Index</th><th><span class="chip la">La Niña</span></th><th><span class="chip nu">Neutral</span></th><th><span class="chip el">El Niño</span></th></tr></thead>
+      <tbody>
+        <tr><td class="idx">Niño 3.4 SST<span class="note">Relative weekly anomaly (BoM)</span></td><td>≤ −0.80 °C</td><td>−0.80 to +0.80 °C</td><td>≥ +0.80 °C</td></tr>
+        <tr><td class="idx">ONI / RONI<span class="note">3-month running mean, ≥3 consecutive seasons</span></td><td>≤ −0.5 °C</td><td>−0.5 to +0.5 °C</td><td>≥ +0.5 °C</td></tr>
+        <tr><td class="idx">SOI<span class="note">Sustained values define phase (Troup)</span></td><td>≥ +7</td><td>−7 to +7</td><td>≤ −7</td></tr>
+        <tr><td class="idx">MEI.v2<span class="note">Standardised σ; ±0.5 commonly used as a guide</span></td><td>≤ −0.5</td><td>−0.5 to +0.5</td><td>≥ +0.5</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <footer>
+    <div style="color:var(--muted);letter-spacing:.14em">DATA SOURCES</div>
+    <div class="src-grid">
+      <span>↳ NOAA CPC — <a href="https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/enso_advisory/" target="_blank" rel="noopener">ENSO Diagnostic Discussion</a></span>
+      <span>↳ NOAA PSL — <a href="https://psl.noaa.gov/enso/mei/" target="_blank" rel="noopener">MEI.v2</a></span>
+      <span>↳ Aust. BoM — <a href="https://www.bom.gov.au/climate/enso/" target="_blank" rel="noopener">ENSO Wrap-Up & SOI</a></span>
+      <span>↳ IRI Columbia — <a href="https://iri.columbia.edu/our-expertise/climate/forecasts/enso/current/" target="_blank" rel="noopener">ENSO Forecast</a></span>
+    </div>
+    <p class="disclaimer">Index values auto-fetched from official sources; forecast probabilities updated from the CPC ENSO Diagnostic Discussion. NOAA replaced the ONI with the Relative ONI (RONI) in February 2026 to account for background ocean warming. Page generated 2026-05-25 06:48 UTC. Always consult the official source links for operational use.</p>
+  </footer>
+</div>
+</body>
+</html>

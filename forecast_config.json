@@ -1,0 +1,18 @@
+{
+  "_comment": "These forecast probabilities come from the CPC ENSO Diagnostic Discussion + CPC/IRI probability table. They are NOT available as a clean machine-readable feed, so update them by hand when CPC issues a new discussion (second Thursday of each month). Source: https://www.cpc.ncep.noaa.gov/products/analysis_monitoring/enso_advisory/ensodisc.shtml",
+  "alert_status": "El Niño Watch",
+  "phase_headline": "Neutral \u2192 Developing El Ni\u00f1o",
+  "phase_subhead": "98% MJJ 2026",
+  "phase_desc": "Seasonal SST anomalies sit near the borderline threshold, but weekly values have surged and the atmosphere is beginning to couple. A rapid transition toward El Ni\u00f1o is underway.",
+  "needle_pct": 63,
+  "probabilities": {
+    "el_nino_onset": {"pct": 82, "period": "May\u2013Jul 2026", "note": "Chance El Ni\u00f1o conditions emerge this season \u2014 CPC El Ni\u00f1o Watch in effect."},
+    "el_nino_persist": {"pct": 96, "period": "Dec 2026 \u2013 Feb 2027", "note": "Chance El Ni\u00f1o continues through the Northern Hemisphere winter peak."},
+    "strong": {"pct": 67, "period": "Peak \u00b7 Nov 2026 \u2013 Jan 2027", "note": "Chance the peak is classified \u201cstrong or very strong\u201d (\u22482-in-3)."},
+    "super": {"pct": 33, "period": "Peak \u00b7 Nov 2026 \u2013 Jan 2027", "note": "Chance the peak exceeds +2.0 \u00b0C relative Ni\u00f1o 3.4 (\u22481-in-3)."}
+  },
+  "el_nino_by_season": [
+    ["MJJ 2026", 82], ["JAS 2026", 90], ["ASO 2026", 94],
+    ["SON 2026", 95], ["OND 2026", 96], ["NDJ 2026-27", 96], ["DJF 2026-27", 96]
+  ]
+}

@@ -1,0 +1,85 @@
+name: Rebuild & Deploy ENSO Dashboard
+
+# Runs on a schedule, on manual trigger, and on pushes to main.
+# ENSO indices update weekly (BoM, Tuesdays) / monthly (CPC, PSL),
+# so a couple of runs per week is plenty.
+on:
+  schedule:
+    # 06:00 UTC every Tuesday and Friday
+    - cron: "0 6 * * 2,5"
+  workflow_dispatch:        # manual "Run workflow" button in the Actions tab
+  push:
+    branches: [main]        # redeploy when you edit code or forecast_config.json
+
+# Allow the deploy job to publish to Pages, and the build job to commit data back.
+permissions:
+  contents: write           # commit regenerated HTML + cache
+  pages: write              # deploy to GitHub Pages
+  id-token: write           # OIDC token required by deploy-pages
+
+# Never run two deploys at once; let an in-progress run finish.
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  # ---------------------------------------------------------------------
+  # 1. Fetch fresh data, regenerate the page, commit it back, and stage
+  #    the static files as a Pages artifact.
+  # ---------------------------------------------------------------------
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Rebuild dashboard (live fetch)
+        run: python build_dashboard.py
+
+      - name: Commit updated dashboard
+        run: |
+          git config user.name  "enso-bot"
+          git config user.email "actions@github.com"
+          git add enso-dashboard.html data_cache.json
+          if git diff --staged --quiet; then
+            echo "No data changes since last run."
+          else
+            git commit -m "Auto-update ENSO dashboard ($(date -u +%Y-%m-%d)) [skip ci]"
+            git push
+          fi
+
+      - name: Stage site for Pages
+        run: |
+          # GitHub Pages serves index.html by default, so publish a copy
+          # under that name without renaming the source file.
+          mkdir -p _site
+          cp enso-dashboard.html _site/index.html
+          cp enso-dashboard.html _site/enso-dashboard.html
+          touch _site/.nojekyll
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  # ---------------------------------------------------------------------
+  # 2. Deploy the artifact to GitHub Pages.
+  # ---------------------------------------------------------------------
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
